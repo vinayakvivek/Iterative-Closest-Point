@@ -8,6 +8,7 @@
 int main(int argc, char** argv) {
 
     std::string scene_file;
+    int num_threads = 4;
 
     if (argc > 1) {
         scene_file = argv[1];
@@ -17,12 +18,18 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    if (argc > 2) {
+        num_threads = atoi(argv[2]);
+    }
+
     std::cout << scene_file << "\n";
 
     Pointcloud *scene = new Pointcloud(scene_file);
     Pointcloud *target = new Pointcloud(scene_file);
 
-    ICP::initICP(scene->points, target->points);
+    ICP::init(scene->points, target->points, num_threads);
+    ICP::step();
+    ICP::end();
 
     return 0;
 }

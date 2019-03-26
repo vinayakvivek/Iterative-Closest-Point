@@ -1,5 +1,6 @@
 #include "icp.h"
 #include "utilityCore.hpp"
+#include "svd3.h"
 #include <omp.h>
 
 #define INITIAL_TRANSFORM 1
@@ -19,12 +20,18 @@ void transform_points(int n, glm::vec4* points, glm::mat4 transformation) {
     }
 }
 
+#pragma omp declare reduction(glm_vec3_add: glm::vec3: \
+    omp_out += omp_in)
+
 /*
  * basic setup,
  */
-void ICP::initICP(std::vector<glm::vec4> scene, std::vector<glm::vec4> target) {
+void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int num_threads = 4) {
 
-    omp_set_num_threads(4);
+    printf("Initializing ICP..\n");
+
+    omp_set_num_threads(num_threads);
+    printf("number of threads: %d\n", num_threads);
 
     size_scene = scene.size();
     size_target = target.size();
@@ -47,8 +54,100 @@ void ICP::initICP(std::vector<glm::vec4> scene, std::vector<glm::vec4> target) {
         transform_points(size_target, &pos[size_scene], initial_transform);
     }
     #endif
+}
 
-    for (int i = 0; i < num_points; ++i) {
-        utilityCore::printVec4(pos[i]);
+void ICP::end() {
+    free(pos);
+    free(pair);
+}
+
+void ICP::step() {
+    // find the closest point in the scene for each point in the target
+    double start_time = omp_get_wtime();
+
+    #pragma omp parallel for default(none) shared(size_scene, size_target, pos, pair)
+    for (int i = 0; i < size_target; i++) {
+        float best = glm::distance(glm::vec3(pos[0]), glm::vec3(pos[i + size_scene]));
+        pair[i] = 0;
+
+        for (int j = 1; j < size_scene; j++) {
+            float d = glm::distance(glm::vec3(pos[j]), glm::vec3(pos[i + size_scene]));
+
+            if (d < best) {
+                pair[i] = j;
+                best = d;
+            }
+        }
     }
+
+    // Calculate mean centered correspondenses
+    glm::vec3 mu_tar(0, 0, 0), mu_cor(0, 0, 0);
+    std::vector<glm::vec3> tar_c(size_target);
+    std::vector<glm::vec3> cor_c(size_target);
+
+    #pragma omp parallel for \
+                default(none) \
+                shared(size_target, size_scene, pos, pair) \
+                reduction(glm_vec3_add : mu_tar, mu_cor)
+    for (int i = 0; i < size_target; i++) {
+        mu_tar += glm::vec3(pos[i + size_scene]);
+        mu_cor += glm::vec3(pos[pair[i]]);
+    }
+
+    mu_tar /= size_target;
+    mu_cor /= size_target;
+
+    #pragma omp parallel for \
+                default(none) \
+                shared(size_target, size_scene, pos, pair, tar_c, cor_c, mu_tar, mu_cor)
+    for (int i = 0; i < size_target; i++) {
+        tar_c[i] = glm::vec3(pos[i + size_scene]) - mu_tar;
+        cor_c[i] = glm::vec3(pos[pair[i]]) - mu_cor;
+    }
+
+    // Calculate W
+    float W[3][3] = {0};
+
+    for (int i = 0; i < size_target; i++) {
+        W[0][0] += tar_c[i].x * cor_c[i].x;
+        W[0][1] += tar_c[i].y * cor_c[i].x;
+        W[0][2] += tar_c[i].z * cor_c[i].x;
+        W[1][0] += tar_c[i].x * cor_c[i].y;
+        W[1][1] += tar_c[i].y * cor_c[i].y;
+        W[1][2] += tar_c[i].z * cor_c[i].y;
+        W[2][0] += tar_c[i].x * cor_c[i].z;
+        W[2][1] += tar_c[i].y * cor_c[i].z;
+        W[2][2] += tar_c[i].z * cor_c[i].z;
+    }
+
+    // calculate SVD of W
+    float U[3][3] = { 0 };
+    float S[3][3] = { 0 };
+    float V[3][3] = { 0 };
+
+    svd(
+        W[0][0], W[0][1], W[0][2], W[1][0], W[1][1], W[1][2], W[2][0], W[2][1], W[2][2],
+        U[0][0], U[0][1], U[0][2], U[1][0], U[1][1], U[1][2], U[2][0], U[2][1], U[2][2],
+        S[0][0], S[0][1], S[0][2], S[1][0], S[1][1], S[1][2], S[2][0], S[2][1], S[2][2],
+        V[0][0], V[0][1], V[0][2], V[1][0], V[1][1], V[1][2], V[2][0], V[2][1], V[2][2]
+    );
+
+
+    glm::mat3 g_U(glm::vec3(U[0][0], U[1][0], U[2][0]), glm::vec3(U[0][1], U[1][1], U[2][1]), glm::vec3(U[0][2], U[1][2], U[2][2]));
+    glm::mat3 g_Vt(glm::vec3(V[0][0], V[0][1], V[0][2]), glm::vec3(V[1][0], V[1][1], V[1][2]), glm::vec3(V[2][0], V[2][1], V[2][2]));
+
+    // Get transformation from SVD
+    glm::mat3 R = g_U * g_Vt;
+    glm::vec3 t = mu_cor - R * mu_tar;
+
+    // update target points
+    #pragma omp parallel for \
+                default(none) \
+                shared(size_target, size_scene, pos, R, t)
+    for (int i = 0; i < size_target; i++) {
+        pos[i + size_scene] = glm::vec4(R * glm::vec3(pos[i + size_scene]) + t, pos[i + size_scene].w);
+    }
+
+    double step_time = omp_get_wtime() - start_time;
+    printf("step_time: %f\n", step_time);
 }

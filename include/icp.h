@@ -8,6 +8,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace ICP {
-    void initICP(std::vector<glm::vec4> scene, std::vector<glm::vec4> target);
-    void endICP();
+    void init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int num_threads);
+    void end();
+
+    void step();
 }
