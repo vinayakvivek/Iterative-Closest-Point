@@ -81,10 +81,9 @@ void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int 
 }
 
 void ICP::end() {
-
-    utilityCore::printMat4(initial_transform);
-    utilityCore::printMat4(glm::inverse(final_transform));
-    utilityCore::printMat4(final_transform);
+    // utilityCore::printMat4(initial_transform);
+    // utilityCore::printMat4(glm::inverse(final_transform));
+    // utilityCore::printMat4(final_transform);
 
     free(pos);
     free(pair);
