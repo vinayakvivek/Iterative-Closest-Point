@@ -10,14 +10,32 @@ int size_target;
 int num_points;
 
 glm::vec4 *pos;
-int *dist;
 int *pair;
+glm::mat4 final_transform;
+glm::mat4 initial_transform;
 
-void transform_points(int n, glm::vec4* points, glm::mat4 transformation) {
-    #pragma omp parallel for default(none) shared(n, points, transformation)
+int curr_step;
+std::vector<float> error_history;
+
+
+void transform_points(int n, glm::vec4* points, const glm::mat4& transform) {
+    #pragma omp parallel for default(none) shared(n, points, transform)
     for (int i = 0; i < n; ++i) {
-        points[i] = transformation * points[i];
+        points[i] = transform * points[i];
     }
+}
+
+float calculate_error() {
+    float error = 0.0;
+    #pragma omp parallel for \
+                default(none) \
+                shared(size_target, size_scene, pos, pair) \
+                reduction(+: error)
+    for (int i = 0; i < size_target; ++i) {
+        error += glm::distance2(glm::vec3(pos[i + size_scene]), glm::vec3(pos[pair[i]]));
+    }
+    error /= size_target;
+    return error;
 }
 
 #pragma omp declare reduction(glm_vec3_add: glm::vec3: \
@@ -47,16 +65,27 @@ void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int 
     {
         glm::vec3 t(80, -22, 100);
         glm::vec3 r(-.5, .6, .8);
+        // glm::vec3 t(10, -0, 0);
+        // glm::vec3 r(.0, .0, .0);
         glm::vec3 s(1, 1, 1);
-        glm::mat4 initial_transform = utilityCore::buildTransformationMatrix(t, r, s);
+        initial_transform = utilityCore::buildTransformationMatrix(t, r, s);
         // utilityCore::printMat4(initial_transform);
 
         transform_points(size_target, &pos[size_scene], initial_transform);
     }
     #endif
+
+    final_transform = glm::mat4(1.0f);
+    curr_step = 0;
+    error_history = std::vector<float>(0);
 }
 
 void ICP::end() {
+
+    utilityCore::printMat4(initial_transform);
+    utilityCore::printMat4(glm::inverse(final_transform));
+    utilityCore::printMat4(final_transform);
+
     free(pos);
     free(pair);
 }
@@ -139,15 +168,26 @@ void ICP::step() {
     // Get transformation from SVD
     glm::mat3 R = g_U * g_Vt;
     glm::vec3 t = mu_cor - R * mu_tar;
+    glm::mat4 curr_transform = glm::translate(glm::mat4(), t) * glm::mat4(R);
 
-    // update target points
-    #pragma omp parallel for \
-                default(none) \
-                shared(size_target, size_scene, pos, R, t)
-    for (int i = 0; i < size_target; i++) {
-        pos[i + size_scene] = glm::vec4(R * glm::vec3(pos[i + size_scene]) + t, pos[i + size_scene].w);
-    }
+    final_transform = curr_transform * final_transform;
+
+    transform_points(size_target, &pos[size_scene], curr_transform);
+    float error = calculate_error();
 
     double step_time = omp_get_wtime() - start_time;
-    printf("step_time: %f\n", step_time);
+    printf("[step %d] step_time: %f, error: %f\n", ++curr_step, step_time, error);
+
+    error_history.push_back(error);
+}
+
+void ICP::write_history(std::string out_filename) {
+    std::ofstream out_file;
+    out_file.open(out_filename);
+
+    out_file << "step,error\n";
+    for (int i = 1; i <= error_history.size(); ++i) {
+        out_file << i << "," << error_history[i - 1] << "\n";
+    }
+    out_file.close();
 }
