@@ -2,3 +2,17 @@
 
 ### Abstract
 `Iterative Closest Point` (ICP) is one of the widely used algorithms in aligning three dimensional models given an initial guess of the rigid body transformation required. In this algorithm, one point cloud, the reference, is kept fixed, while the other one, the source, is transformed to best match the reference. The algorithm iteratively revises the transformation (combination of translation and rotation) needed to minimize an error metric, usually a distance from the source to the reference point cloud, such as the sum of squared differences between the coordinates of the matched pairs. In each step various parts of the algorithm can be parallelized to improve the performance. At first, we plan to use OpenMP to parallelize the ICP algorithm. If time permits, we will try to write CUDA code and use GPU to improve the performance further.
+
+### Compiling
+```bash
+mkdir -p build
+cd build
+cmake ..
+make
+```
+This will create an executable `icp` inside build directory.
+
+### Usage
+```bash
+./icp <scene_file> <target_file> [<num_threads>, <num_iterations>, <out_file>]
+```
