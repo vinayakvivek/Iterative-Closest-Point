@@ -15,6 +15,11 @@ glm::mat4 final_transform;
 glm::mat4 initial_transform;
 
 int curr_step;
+int save_interval;
+std::string out_dir;
+std::string original_file;
+std::string transformed_file;
+std::string step_file;
 std::vector<float> error_history;
 
 
@@ -38,13 +43,31 @@ float calculate_error() {
     return error;
 }
 
+void save_points(std::string file_name, glm::vec4* points, int n) {
+    std::ofstream f_out;
+    f_out.open(file_name);
+    if (!f_out.is_open()) {
+        std::cout << "Error reading from file - aborting!" << std::endl;
+        throw;
+    }
+    for (int i = 0; i < n; ++i) {
+        f_out << points[i].x << " " << points[i].y << " " << points[i].z << "\n";
+    }
+    f_out.close();
+}
+
 #pragma omp declare reduction(glm_vec3_add: glm::vec3: \
     omp_out += omp_in)
 
 /*
  * basic setup,
  */
-void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int num_threads = 4) {
+void ICP::init(
+        std::vector<glm::vec4> scene,
+        std::vector<glm::vec4> target,
+        std::string _out_dir,
+        int _save_interval,
+        int num_threads) {
 
     printf("Initializing ICP..\n");
 
@@ -63,9 +86,9 @@ void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int 
 
     #if INITIAL_TRANSFORM
     {
-        glm::vec3 t(80, -22, 100);
+        // glm::vec3 t(80, -22, 100);
         glm::vec3 r(-.5, .6, .8);
-        // glm::vec3 t(10, -0, 0);
+        glm::vec3 t(0, 0, 0);
         // glm::vec3 r(.0, .0, .0);
         glm::vec3 s(1, 1, 1);
         initial_transform = utilityCore::buildTransformationMatrix(t, r, s);
@@ -78,12 +101,21 @@ void ICP::init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int 
     final_transform = glm::mat4(1.0f);
     curr_step = 0;
     error_history = std::vector<float>(0);
+    save_interval = _save_interval;
+
+    out_dir = _out_dir;
+    original_file = _out_dir + "/original.txt";
+    transformed_file = _out_dir + "/transformed.txt";
+    step_file = _out_dir + "/step_";
+
+    save_points(original_file, pos, size_scene);
+    save_points(transformed_file, &pos[size_scene], size_target);
 }
 
 void ICP::end() {
-    // utilityCore::printMat4(initial_transform);
-    // utilityCore::printMat4(glm::inverse(final_transform));
-    // utilityCore::printMat4(final_transform);
+
+    std::string save_path = out_dir + "/final.txt";
+    save_points(save_path, &pos[size_scene], size_target);
 
     free(pos);
     free(pair);
@@ -175,6 +207,12 @@ void ICP::step() {
     float error = calculate_error();
 
     double step_time = omp_get_wtime() - start_time;
+
+    if (curr_step % save_interval == 0) {
+        std::string save_path = step_file + std::to_string(curr_step) + ".txt";
+        save_points(save_path, &pos[size_scene], size_target);
+    }
+
     printf("[step %d] step_time: %f, error: %f\n", ++curr_step, step_time, error);
 
     error_history.push_back(error);

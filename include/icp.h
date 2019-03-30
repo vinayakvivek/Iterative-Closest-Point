@@ -12,7 +12,12 @@
 
 
 namespace ICP {
-    void init(std::vector<glm::vec4> scene, std::vector<glm::vec4> target, int num_threads);
+    void init(
+        std::vector<glm::vec4> scene,
+        std::vector<glm::vec4> target,
+        std::string out_dir,
+        int save_interval,
+        int num_threads);
     void end();
 
     void step();
