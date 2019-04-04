@@ -144,11 +144,12 @@ void ICP::step() {
     glm::vec3 mu_tar(0, 0, 0), mu_cor(0, 0, 0);
     std::vector<glm::vec3> tar_c(size_target);
     std::vector<glm::vec3> cor_c(size_target);
-
+    
+    /*
     #pragma omp parallel for \
                 default(none) \
                 shared(size_target, size_scene, pos, pair) \
-                reduction(glm_vec3_add : mu_tar, mu_cor)
+                reduction(glm_vec3_add : mu_tar, mu_cor) */
     for (int i = 0; i < size_target; i++) {
         mu_tar += glm::vec3(pos[i + size_scene]);
         mu_cor += glm::vec3(pos[pair[i]]);

@@ -3,9 +3,14 @@
 #include <omp.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 #include "pointcloud.h"
 #include "icp.h"
+
+namespace pt = boost::property_tree;
 
 
 int main(int argc, char** argv) {
@@ -15,7 +20,7 @@ int main(int argc, char** argv) {
     int num_threads = 4;
     int num_iterations = 10;
     std::string err_file = "error_history.csv";
-    std::string out_dir = "../output/test";
+    std::string out_dir = "../output";
     int save_interval = 10;
 
     if (argc > 2) {
@@ -24,7 +29,7 @@ int main(int argc, char** argv) {
     } else {
         std::cout << "[error] please provide path to scene file.\n";
         std::cout << "usage: ./icp <scene_file> <target_file> \
-            [<num_threads>, <num_iterations>, <out_dir>, <save_interval>]\n";
+        [<num_threads>, <num_iterations>, <out_dir>, <save_interval>]\n";
         return -1;
     }
 
@@ -43,6 +48,23 @@ int main(int argc, char** argv) {
     if (argc > 6) {
         save_interval = atoi(argv[6]);
     }
+
+    // --------------------------------
+    pt::ptree config;
+    const std::string config_file = "sample_config.xml";
+
+    std::ifstream file(config_file);
+    if (file) {
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        file.close();
+        pt::read_xml(buffer, config);
+    }
+
+    num_threads = config.get<int>("icp.numThreads");
+    std::cout << "num_threads: " << num_threads << "\n";
+
+    // --------------------------------
 
     // Creating a directory
     if (mkdir(out_dir.c_str(), 0777) == -1)
