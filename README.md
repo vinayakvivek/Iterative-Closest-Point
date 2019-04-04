@@ -14,5 +14,31 @@ This will create an executable `icp` inside build directory.
 
 ### Usage
 ```bash
-./icp <scene_file> <target_file> [<num_threads>, <num_iterations>, <out_file>]
+./icp <config_file>
+```
+
+config file is of XML format, following is a sample:
+```xml
+<icp>
+    <scene>../scenes/cone.txt</scene>
+    <target>../scenes/cone.txt</target>
+    <numThreads>16</numThreads>
+    <numIterations>5</numIterations>
+    <errorFile>error_history.csv</errorFile>
+    <outDir>output</outDir>
+    <saveInterval>10</saveInterval>
+
+    <initialTransform>
+        <translate>
+            <x>80.0</x>
+            <y>-22.0</y>
+            <z>100.0</z>
+        </translate>
+        <rotate>
+            <x>-0.5</x>
+            <y>0.6</y>
+            <z>0.8</z>
+        </rotate>
+    </initialTransform>
+</icp>
 ```

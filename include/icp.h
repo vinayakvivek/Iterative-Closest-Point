@@ -17,7 +17,8 @@ namespace ICP {
         std::vector<glm::vec4> target,
         std::string out_dir,
         int save_interval,
-        int num_threads);
+        int num_threads,
+        glm::mat4 initial_transform);
     void end();
 
     void step();

@@ -12,7 +12,6 @@ int num_points;
 glm::vec4 *pos;
 int *pair;
 glm::mat4 final_transform;
-glm::mat4 initial_transform;
 
 int curr_step;
 int save_interval;
@@ -67,7 +66,8 @@ void ICP::init(
         std::vector<glm::vec4> target,
         std::string _out_dir,
         int _save_interval,
-        int num_threads) {
+        int num_threads,
+        glm::mat4 initial_transform) {
 
     printf("Initializing ICP..\n");
 
@@ -84,19 +84,7 @@ void ICP::init(
 
     pair = (int*) malloc(size_target * sizeof(int));
 
-    #if INITIAL_TRANSFORM
-    {
-        // glm::vec3 t(80, -22, 100);
-        glm::vec3 r(-.5, .6, .8);
-        glm::vec3 t(0, 0, 0);
-        // glm::vec3 r(.0, .0, .0);
-        glm::vec3 s(1, 1, 1);
-        initial_transform = utilityCore::buildTransformationMatrix(t, r, s);
-        // utilityCore::printMat4(initial_transform);
-
-        transform_points(size_target, &pos[size_scene], initial_transform);
-    }
-    #endif
+    transform_points(size_target, &pos[size_scene], initial_transform);
 
     final_transform = glm::mat4(1.0f);
     curr_step = 0;
@@ -144,7 +132,7 @@ void ICP::step() {
     glm::vec3 mu_tar(0, 0, 0), mu_cor(0, 0, 0);
     std::vector<glm::vec3> tar_c(size_target);
     std::vector<glm::vec3> cor_c(size_target);
-    
+
     /*
     #pragma omp parallel for \
                 default(none) \
