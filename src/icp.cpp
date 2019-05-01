@@ -4,7 +4,6 @@
 #include <omp.h>
 
 #define INITIAL_TRANSFORM 1
-#define BLOCK_SIZE 512
 
 int size_scene;
 int size_target;
@@ -22,15 +21,6 @@ std::string transformed_file;
 std::string step_file;
 std::vector<float> error_history;
 
-
-__global__ void Transform_cuda(int n, glm::vec4* points, const glm::mat4& transform) {
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i<n)
-    {
-        points[i] = transform * points[i];
-    }
-}
 
 void transform_points(int n, glm::vec4* points, const glm::mat4& transform) {
     #pragma omp parallel for default(none) shared(n, points, transform)
@@ -94,9 +84,7 @@ void ICP::init(
 
     pair = (int*) malloc(size_target * sizeof(int));
 
-    Transform_cuda<<<size_target/BLOCK_SIZE,BLOCK_SIZE>>>(size_target, &pos[size_scene], initial_transform);
-
-    //transform_points(size_target, &pos[size_scene], initial_transform);
+    transform_points(size_target, &pos[size_scene], initial_transform);
 
     final_transform = glm::mat4(1.0f);
     curr_step = 0;
@@ -204,9 +192,7 @@ void ICP::step() {
 
     final_transform = curr_transform * final_transform;
 
-    Transform_cuda<<<size_target/BLOCK_SIZE,BLOCK_SIZE>>>(size_target, &pos[size_scene], curr_transform);
-
-    //transform_points(size_target, &pos[size_scene], curr_transform);
+    transform_points(size_target, &pos[size_scene], curr_transform);
     float error = calculate_error();
 
     double step_time = omp_get_wtime() - start_time;
